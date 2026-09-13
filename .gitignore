@@ -1,0 +1,11 @@
+# ── INTERNAL — never publish ────────────────────────────────────────
+# internal.html has no authentication. GitHub Pages serves everything
+# that is committed, so committing this file publishes creator-level
+# data, amounts due and payments to the open internet.
+#
+# Do not remove these lines. Do not `git add -f` them.
+internal.html
+VIVELY_Internal_Data.xlsx
+
+# Seed workbook for the public sheet — lives in Drive, not in the repo
+VIVELY_Report_Data.xlsx
