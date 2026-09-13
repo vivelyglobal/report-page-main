@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VIVELY Report Console</title>
+<meta name="robots" content="noindex" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.min.css" />
+<link rel="stylesheet" href="vively.css" />
+<style>
+  table.edit td { padding: 5px 4px; }
+  table.edit input {
+    padding: 7px 8px; border-radius: 8px; font-size: 13px;
+    text-align: right; font-variant-numeric: tabular-nums;
+  }
+  table.edit input.txt { text-align: left; font-variant-numeric: normal; }
+  table.edit td.tight { width: 78px; }
+  table.edit td.namecol { min-width: 150px; }
+  table.edit input { padding: 7px 7px; }
+  table.edit th { padding-bottom: 7px; }
+  .rowbtn { border: 0; background: none; cursor: pointer; color: var(--faint);
+            font-size: 16px; line-height: 1; padding: 4px 6px; border-radius: 6px; }
+  .rowbtn:hover { background: #f3f2ec; color: var(--ink); }
+  .linkrow {
+    display: flex; align-items: center; gap: 10px; padding: 10px 0;
+    border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  }
+  .linkrow:last-child { border-bottom: 0; }
+  .linkrow .u {
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    flex: 1 1 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: 13px; }
+  .steps li { margin-bottom: 7px; }
+  .steps code { font-family: var(--mono); font-size: 12px;
+                background: #f5f4ee; padding: 1px 5px; border-radius: 4px; }
+  .savebar {
+    z-index: 20;
+    position: sticky; bottom: 0; background: var(--bg); padding: 14px 0 6px;
+    border-top: 1px solid var(--line); display: flex; gap: 10px;
+    align-items: center; flex-wrap: wrap; margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     EDITING CONSOLE — internal. Not linked from any partner page.
+     Partner pages are index.html (root) and report.html?brand=…
+     ══════════════════════════════════════════════════════════════════ -->
+
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <h1><span class="dot idle" id="dot"></span>Report Console</h1>
+      <p class="sub" id="sub">Loading…</p>
+    </div>
+    <div class="spacer"></div>
+    <a class="btn" href="./" target="_blank" rel="noopener">Open partner report ↗</a>
+  </div>
+
+  <div class="notice"><b>Internal page.</b> Partners never see this — their links
+    (<code>./</code> and <code>report.html?brand=…</code>) carry no editing controls.
+    Don't share this URL.</div>
+
+  <div id="msg"></div>
+
+  <!-- ── numbers ───────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="eyebrow">Data points</div>
+    <h2>Campaigns</h2>
+    <p class="lede">Type over any number. Untick <b>Show</b> to hide a campaign from
+      partner reports without deleting it. ER is calculated for you.</p>
+    <div class="tablewrap">
+      <table class="edit">
+        <thead><tr>
+          <th>Campaign</th><th>Show</th><th>Uploaded</th><th>Pending</th><th>Views</th>
+          <th>Likes</th><th>Comments</th><th>Reposts</th><th>Creators</th><th>ER %</th><th></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p style="margin:16px 0 0"><button class="btn small" id="add">+ Add campaign</button></p>
+  </div>
+
+  <!-- ── creator nationality ───────────────────────────────────────── -->
+  <div class="card">
+    <div class="eyebrow">Data points</div>
+    <h2>Creator nationality</h2>
+    <p class="lede">One country per line, as <code>Country = number of creators</code>.
+      Leave blank to hide the section from that campaign's report.</p>
+    <label class="field" style="max-width:320px">
+      <span>Campaign</span>
+      <select id="cpick"></select>
+    </label>
+    <textarea id="ctext" spellcheck="false" placeholder="Indonesia = 14&#10;India = 10&#10;Russia = 4"></textarea>
+  </div>
+
+  <!-- ── partner links ─────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="eyebrow">Share</div>
+    <h2>Partner links</h2>
+    <p class="lede">Each link opens the report filtered to that campaign. Anyone with
+      the link can view it — no sign-in.</p>
+    <div id="links"></div>
+  </div>
+
+  <!-- ── save ──────────────────────────────────────────────────────── -->
+  <div class="savebar">
+    <button class="btn primary" id="save">Save to sheet</button>
+    <button class="btn" id="reload">Reload from sheet</button>
+    <span class="spacer"></span>
+    <span class="hint" id="dirty"></span>
+  </div>
+
+  <p class="foot" id="stamp"></p>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="config.js"></script>
+<script src="vively.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var TOKEN_KEY = "vively_write_token";
+
+  var state = { rows: [], countries: {}, updated: null, pick: "", dirty: false };
+
+  function toast(text) {
+    var t = $("toast");
+    t.textContent = text; t.classList.add("on");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { t.classList.remove("on"); }, 2600);
+  }
+
+  function markDirty() {
+    state.dirty = true;
+    $("dirty").textContent = "Unsaved changes";
+  }
+  function markClean() {
+    state.dirty = false;
+    $("dirty").textContent = "";
+  }
+
+  window.addEventListener("beforeunload", function (e) {
+    if (state.dirty) { e.preventDefault(); e.returnValue = ""; }
+  });
+
+  /* ── campaigns table ─────────────────────────────────────────────── */
+  var NUMS = ["uploaded", "pending", "views", "likes", "comments", "shares", "creators"];
+
+  function erOf(r) {
+    var v = V.N(r.views);
+    if (!v) return 0;
+    return ((V.N(r.likes) + V.N(r.comments) + V.N(r.shares)) / v) * 100;
+  }
+
+  function drawRows() {
+    $("rows").innerHTML = state.rows.map(function (r, i) {
+      var cells = NUMS.map(function (f) {
+        return '<td class="tight"><input inputmode="numeric" data-i="' + i +
+               '" data-f="' + f + '" value="' + V.esc(r[f]) + '" /></td>';
+      }).join("");
+      return '<tr>' +
+        '<td class="namecol"><input class="txt" data-i="' + i + '" data-f="name" value="' +
+          V.esc(r.name) + '" placeholder="Campaign name" /></td>' +
+        '<td><input type="checkbox" data-i="' + i + '" data-f="show" ' +
+          (V.B(r.show) ? "checked" : "") + ' style="width:auto" /></td>' +
+        cells +
+        '<td class="er">' + V.pct(erOf(r)) + '</td>' +
+        '<td><button class="rowbtn" data-del="' + i + '" title="Delete campaign">&times;</button></td>' +
+      '</tr>';
+    }).join("");
+  }
+
+  $("rows").addEventListener("input", function (e) {
+    var el = e.target, i = el.dataset.i, f = el.dataset.f;
+    if (i === undefined || !f) return;
+    state.rows[i][f] = el.type === "checkbox" ? (el.checked ? "TRUE" : "FALSE") : el.value;
+    if (f === "name") { drawLinks(); drawPicker(); }
+    if (NUMS.indexOf(f) >= 0) {
+      el.closest("tr").querySelector(".er").textContent = V.pct(erOf(state.rows[i]));
+    }
+    markDirty();
+  });
+  $("rows").addEventListener("change", function (e) {
+    if (e.target.type === "checkbox") {
+      state.rows[e.target.dataset.i].show = e.target.checked ? "TRUE" : "FALSE";
+      drawLinks(); markDirty();
+    }
+  });
+  $("rows").addEventListener("click", function (e) {
+    var i = e.target.dataset.del;
+    if (i === undefined) return;
+    var r = state.rows[i];
+    if (!confirm('Delete "' + (r.name || "this campaign") + '" and its country data?')) return;
+    delete state.countries[idOf(r)];
+    state.rows.splice(i, 1);
+    redrawAll(); markDirty();
+  });
+
+  $("add").onclick = function () {
+    state.rows.push({ id: "", name: "", show: "TRUE", uploaded: "", pending: "",
+                      views: "", likes: "", comments: "", shares: "", creators: "", note: "" });
+    redrawAll(); markDirty();
+    var inputs = $("rows").querySelectorAll('input.txt');
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  };
+
+  function idOf(r) {
+    return V.S(r.id) || V.S(r.name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  }
+
+  /* ── country editor ──────────────────────────────────────────────── */
+  function drawPicker() {
+    var sel = $("cpick");
+    var prev = state.pick;
+    sel.innerHTML = state.rows.filter(function (r) { return V.S(r.name); })
+      .map(function (r) {
+        return '<option value="' + V.esc(idOf(r)) + '">' + V.esc(r.name) + '</option>';
+      }).join("");
+    if (!sel.options.length) { sel.innerHTML = '<option value="">No campaigns yet</option>'; }
+    state.pick = [].some.call(sel.options, function (o) { return o.value === prev; })
+      ? prev : (sel.options[0] ? sel.options[0].value : "");
+    sel.value = state.pick;
+    loadText();
+  }
+
+  function loadText() {
+    var list = state.countries[state.pick] || [];
+    $("ctext").value = list.map(function (c) { return c.country + " = " + c.kols; }).join("\n");
+  }
+
+  function storeText() {
+    if (!state.pick) return;
+    var out = [];
+    $("ctext").value.split("\n").forEach(function (line) {
+      line = line.trim();
+      if (!line) return;
+      var m = line.split("=");
+      var name = m[0].trim();
+      if (!name) return;
+      out.push({ country: name, kols: m.length > 1 ? Math.round(V.N(m[1])) : 0 });
+    });
+    state.countries[state.pick] = out;
+  }
+
+  $("cpick").onchange = function () {
+    storeText();
+    state.pick = $("cpick").value;
+    loadText();
+  };
+  $("ctext").oninput = function () { storeText(); markDirty(); };
+
+  /* ── partner links ───────────────────────────────────────────────── */
+  function rootUrl() { return new URL("./", location.href).href; }
+  function reportUrl(id) {
+    return new URL("report.html?brand=" + encodeURIComponent(id), location.href).href;
+  }
+  function drawLinks() {
+    var live = state.rows.filter(function (r) { return V.S(r.name) && V.B(r.show); });
+    var rows = [{ name: "All campaigns", url: rootUrl() }].concat(
+      live.map(function (r) {
+        return { name: r.name, url: reportUrl(idOf(r)) };
+      })
+    );
+    $("links").innerHTML = rows.map(function (r) {
+      return '<div class="linkrow">' +
+        '<b style="flex:0 0 auto;min-width:120px">' + V.esc(r.name) + '</b>' +
+        '<span class="u">' + V.esc(r.url) + '</span>' +
+        '<button class="btn small" data-url="' + V.esc(r.url) + '">Copy</button>' +
+        '<a class="btn small" href="' + V.esc(r.url) + '" target="_blank" rel="noopener">Open ↗</a>' +
+      '</div>';
+    }).join("");
+  }
+  $("links").addEventListener("click", function (e) {
+    var u = e.target.dataset.url;
+    if (!u) return;
+    navigator.clipboard.writeText(u)
+      .then(function () { toast("Link copied"); })
+      .catch(function () { toast("Copy failed"); });
+  });
+
+  function redrawAll() { drawRows(); drawPicker(); drawLinks(); }
+
+  /* ── load & save ─────────────────────────────────────────────────── */
+  function ingest(res) {
+    state.rows = (res.data.campaigns || []).map(function (r) {
+      return {
+        id: V.S(r.id), name: V.S(r.name) || V.S(r.id),
+        show: V.B(r.show) ? "TRUE" : "FALSE",
+        uploaded: V.S(r.uploaded), pending: V.S(r.pending), views: V.S(r.views),
+        likes: V.S(r.likes), comments: V.S(r.comments), shares: V.S(r.shares),
+        creators: V.S(r.creators), note: V.S(r.note)
+      };
+    });
+    state.countries = {};
+    (res.data.countries || []).forEach(function (r) {
+      var k = V.S(r.campaign).toLowerCase();
+      if (!k) return;
+      (state.countries[k] = state.countries[k] || []).push({
+        country: V.S(r.country), kols: Math.round(V.N(r.kols))
+      });
+    });
+    state.updated = res.data.updated || null;
+
+    $("dot").className = "dot" + (res.source === "live" ? "" : " warn");
+    $("sub").textContent = state.rows.length + " campaign" +
+      (state.rows.length === 1 ? "" : "s") +
+      (res.source === "live" ? " · connected to your sheet" : " · sample data");
+    $("stamp").textContent = state.updated
+      ? "Sheet last read " + new Date(state.updated).toLocaleString() : "";
+
+    if (!V.CFG.SCRIPT_URL) {
+      $("msg").innerHTML = '<div class="notice warn"><b>Not connected yet.</b> ' +
+        'Follow SETUP.md, then paste your Web app URL into <code>config.js</code>. ' +
+        'Until then you are editing sample data and Save will not work.</div>';
+    } else if (res.error) {
+      $("msg").innerHTML = '<div class="notice warn"><b>Could not read the sheet.</b> ' +
+        V.esc(res.error) + '</div>';
+    } else {
+      $("msg").innerHTML = "";
+    }
+    redrawAll();
+    markClean();
+  }
+
+  function payload() {
+    storeText();
+    var campaigns = state.rows.filter(function (r) { return V.S(r.name); })
+      .map(function (r) {
+        var o = { id: idOf(r), name: V.S(r.name), show: V.B(r.show) ? "TRUE" : "FALSE", note: r.note };
+        NUMS.forEach(function (f) { o[f] = Math.round(V.N(r[f])); });
+        return o;
+      });
+    var countries = [];
+    campaigns.forEach(function (c) {
+      (state.countries[c.id] || []).forEach(function (x) {
+        if (x.country) countries.push({ campaign: c.id, country: x.country, kols: x.kols });
+      });
+    });
+    return { campaigns: campaigns, countries: countries };
+  }
+
+  $("save").onclick = function () {
+    if (!V.CFG.SCRIPT_URL) { toast("Add SCRIPT_URL to config.js first"); return; }
+    var token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      token = prompt("Write token\n\nThe WRITE_TOKEN you set in Code.gs. Stored in this browser only.");
+      if (!token) return;
+      localStorage.setItem(TOKEN_KEY, token);
+    }
+    var p = payload();
+    var btn = this;
+    btn.disabled = true; btn.textContent = "Saving…";
+    V.save(V.CFG.SCRIPT_URL, token, p.campaigns, p.countries)
+      .then(function (j) {
+        state.updated = j.updated;
+        $("stamp").textContent = "Sheet last written " + new Date(j.updated).toLocaleString();
+        markClean();
+        toast("Saved to sheet");
+      })
+      .catch(function (err) {
+        if (/token/i.test(err.message)) localStorage.removeItem(TOKEN_KEY);
+        toast(err.message || "Save failed");
+      })
+      .finally(function () { btn.disabled = false; btn.textContent = "Save to sheet"; });
+  };
+
+  $("reload").onclick = function () {
+    if (state.dirty && !confirm("Discard unsaved changes and reload from the sheet?")) return;
+    V.load(V.CFG.SCRIPT_URL).then(ingest);
+  };
+
+  V.load(V.CFG.SCRIPT_URL).then(ingest);
+})();
+</script>
+</body>
+</html>
