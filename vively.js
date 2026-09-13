@@ -9,15 +9,19 @@ window.V = (function () {
   /* ── built-in sample so both pages render before setup ── */
   var SAMPLE = {
     campaigns: [
-      { id: "kowork", name: "KOWORK", show: "TRUE", uploaded: 46, pending: 3,
-        views: 657904, likes: 14640, comments: 1709, shares: 874, creators: 49, note: "" }
+      { id: "sample-a", name: "Sample Campaign A", show: "TRUE", uploaded: 46, pending: 3,
+        views: 657904, likes: 14640, comments: 1709, shares: 874, creators: 49, note: "" },
+      { id: "sample-b", name: "Sample Campaign B", show: "TRUE", uploaded: 27, pending: 0,
+        views: 301149, likes: 1589, comments: 462, shares: 74, creators: 27, note: "" },
+      { id: "sample-c", name: "Sample Campaign C", show: "TRUE", uploaded: 8, pending: 2,
+        views: 26290, likes: 220, comments: 84, shares: 59, creators: 8, note: "" }
     ],
     countries: [
-      { campaign: "kowork", country: "Indonesia", kols: 14 },
-      { campaign: "kowork", country: "India", kols: 10 },
-      { campaign: "kowork", country: "Russia", kols: 4 },
-      { campaign: "kowork", country: "USA", kols: 4 },
-      { campaign: "kowork", country: "Japan", kols: 2 }
+      { campaign: "sample-a", country: "Indonesia", kols: 14 },
+      { campaign: "sample-a", country: "India", kols: 10 },
+      { campaign: "sample-a", country: "Russia", kols: 4 },
+      { campaign: "sample-b", country: "Saudi Arabia", kols: 9 },
+      { campaign: "sample-b", country: "Jordan", kols: 5 }
     ]
   };
 

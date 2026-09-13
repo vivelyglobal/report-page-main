@@ -11,7 +11,12 @@
 (function () {
   var PAGE = window.VIVELY_PAGE === "landing" ? "landing" : "report";
   var qs = new URLSearchParams(location.search);
-  var state = { campaigns: [], countries: [], brand: qs.get("brand") || "", updated: null };
+  /* Only report.html resolves a campaign. The landing page is always the
+     full directory, so a stray ?brand= on the root URL cannot narrow it. */
+  var state = {
+    campaigns: [], countries: [], updated: null,
+    brand: PAGE === "report" ? (qs.get("brand") || "") : ""
+  };
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -136,7 +141,7 @@
 
   /* Directory of per-campaign reports — navigation only, landing page. */
   function renderDirectory() {
-    if (PAGE !== "landing" || state.campaigns.length < 2) return "";
+    if (PAGE !== "landing" || !state.campaigns.length) return "";
     var items = state.campaigns.map(function (c) {
       return '<a class="dir-item" href="report.html?brand=' + encodeURIComponent(c.id) + '">' +
         '<span class="dir-name">' + V.esc(c.name) + '</span>' +
@@ -167,8 +172,9 @@
       : '';
 
     renderKpis(list);
-    $("body").innerHTML = backLink + renderTable(list) +
-                          renderCountries(list) + renderDirectory();
+    $("body").innerHTML = PAGE === "landing"
+      ? renderDirectory() + renderTable(list) + renderCountries(list)
+      : backLink + renderTable(list) + renderCountries(list);
 
     $("stamp").textContent = state.updated
       ? "Data last synced " + new Date(state.updated).toLocaleString()
@@ -178,6 +184,19 @@
   function fillViewPicker() {
     var sel = $("view");
     if (!sel) return;
+
+    if (PAGE === "landing") {
+      sel.innerHTML = '<option value="">All campaigns (' + state.campaigns.length + ')</option>' +
+        state.campaigns.map(function (c) {
+          return '<option value="' + V.esc(c.id) + '">' + V.esc(c.name) + '</option>';
+        }).join("");
+      sel.value = "";
+      sel.onchange = function () {
+        if (sel.value) location.href = "report.html?brand=" + encodeURIComponent(sel.value);
+      };
+      return;
+    }
+
     sel.innerHTML = '<option value="">All campaigns (' + state.campaigns.length + ')</option>' +
       state.campaigns.map(function (c) {
         return '<option value="' + V.esc(c.id) + '">' + V.esc(c.name) + '</option>';
