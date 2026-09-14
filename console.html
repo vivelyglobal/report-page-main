@@ -346,7 +346,7 @@
   }
 
   $("save").onclick = function () {
-    if (!V.CFG.SCRIPT_URL) { toast("Add SCRIPT_URL to config.js first"); return; }
+    if (!V.CFG.SCRIPT_URL) { toast("https://script.google.com/macros/s/AKfycby8SwMfWyW1y6xDLh1yOX9c0PZ26IPLJr9PMgzxZpnBl9EgxybIqgWCkjK9vQihjXkFwA/exec"); return; }
     var token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
       token = prompt("Write token\n\nThe WRITE_TOKEN you set in Code.gs. Stored in this browser only.");
