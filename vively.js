@@ -6,25 +6,6 @@
 window.V = (function () {
   var CFG = window.VIVELY_CONFIG || {};
 
-  /* ── built-in sample so both pages render before setup ── */
-  var SAMPLE = {
-    campaigns: [
-      { id: "sample-a", name: "Sample Campaign A", show: "TRUE", uploaded: 46, pending: 3,
-        views: 657904, likes: 14640, comments: 1709, shares: 874, creators: 49, note: "" },
-      { id: "sample-b", name: "Sample Campaign B", show: "TRUE", uploaded: 27, pending: 0,
-        views: 301149, likes: 1589, comments: 462, shares: 74, creators: 27, note: "" },
-      { id: "sample-c", name: "Sample Campaign C", show: "TRUE", uploaded: 8, pending: 2,
-        views: 26290, likes: 220, comments: 84, shares: 59, creators: 8, note: "" }
-    ],
-    countries: [
-      { campaign: "sample-a", country: "Indonesia", kols: 14 },
-      { campaign: "sample-a", country: "India", kols: 10 },
-      { campaign: "sample-a", country: "Russia", kols: 4 },
-      { campaign: "sample-b", country: "Saudi Arabia", kols: 9 },
-      { campaign: "sample-b", country: "Jordan", kols: 5 }
-    ]
-  };
-
   /* ── coercion ── */
   var S = function (v) { return String(v === undefined || v === null ? "" : v).trim(); };
   var N = function (v) {
@@ -99,11 +80,15 @@ window.V = (function () {
       .sort(function (a, b) { return b.kols - a.kols || a.country.localeCompare(b.country); });
   }
 
-  /* ── JSONP read: works from any static host, no CORS to negotiate ── */
+  /* ── JSONP read: works from any static host, no CORS to negotiate ──
+     Never invents data. On any failure the caller gets data:null and is
+     expected to render an unavailable state — a partner must never be
+     shown placeholder figures that look like their campaign. ── */
   function load(url) {
     return new Promise(function (resolve) {
       if (!url) {
-        resolve({ data: SAMPLE, source: "sample", error: null });
+        resolve({ data: null, source: "unconfigured",
+                  error: "No data source is configured (SCRIPT_URL is empty in config.js)." });
         return;
       }
       var cb = "vively_cb_" + Math.random().toString(36).slice(2);
@@ -120,21 +105,21 @@ window.V = (function () {
       }
 
       var timer = setTimeout(function () {
-        finish({ data: SAMPLE, source: "sample",
-                 error: "The sheet did not answer in 12 seconds." });
+        finish({ data: null, source: "error",
+                 error: "The data source did not answer in 12 seconds." });
       }, 12000);
 
       window[cb] = function (payload) {
         if (payload && payload.ok) {
           finish({ data: payload, source: "live", error: null });
         } else {
-          finish({ data: SAMPLE, source: "sample",
-                   error: (payload && payload.error) || "The sheet returned no data." });
+          finish({ data: null, source: "error",
+                   error: (payload && payload.error) || "The data source returned no data." });
         }
       };
 
       tag.onerror = function () {
-        finish({ data: SAMPLE, source: "sample",
+        finish({ data: null, source: "error",
                  error: "Could not reach the Web app URL. Check it ends in /exec and is deployed to “Anyone”." });
       };
       tag.src = url + (url.indexOf("?") < 0 ? "?" : "&") +
@@ -158,7 +143,7 @@ window.V = (function () {
   }
 
   return {
-    CFG: CFG, SAMPLE: SAMPLE,
+    CFG: CFG,
     S: S, N: N, B: B,
     num: num, pct: pct, compact: compact, esc: esc,
     clean: clean, total: total, countriesFor: countriesFor,

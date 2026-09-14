@@ -32,11 +32,12 @@
 
   function selected() {
     if (!state.brand) return state.campaigns;
-    var hit = state.campaigns.filter(function (c) {
+    /* No silent widening: an unknown ?brand= resolves to nothing, never to
+       "all campaigns" — that would show one partner everybody else's numbers. */
+    return state.campaigns.filter(function (c) {
       return c.id.toLowerCase() === state.brand.toLowerCase() ||
              c.name.toLowerCase() === state.brand.toLowerCase();
     });
-    return hit.length ? hit : state.campaigns;
   }
 
   function tile(label, value, note, cls) {
@@ -156,6 +157,32 @@
     '</div>';
   }
 
+  /* Shown instead of the report whenever there is nothing real to show.
+     Carries no figures, no campaign names, and no internal detail. */
+  function renderUnavailable(heading, detail) {
+    var bar = document.querySelector(".topbar");
+    if (bar) {
+      ["view", "copy", "csv"].forEach(function (id) {
+        var el = $(id);
+        var host = el && el.closest ? (el.closest("label") || el) : el;
+        if (host) host.style.display = "none";
+      });
+    }
+    document.title = (V.CFG.ORG || "VIVELY") + " — Campaign Performance";
+    $("title").textContent = (V.CFG.ORG || "VIVELY") + " Performance";
+    $("subtitle").textContent = "";
+    $("dot").className = "dot warn";
+    $("msg").innerHTML = "";
+    $("kpis").innerHTML = "";
+    $("body").innerHTML =
+      '<div class="card empty">' +
+        '<h2>' + V.esc(heading) + '</h2>' +
+        '<p class="lede">' + V.esc(detail) + '</p>' +
+        '<p><button class="btn" onclick="location.reload()">Try again</button></p>' +
+      '</div>';
+    $("stamp").textContent = "";
+  }
+
   function render() {
     var list = selected();
     var org = V.CFG.ORG || "VIVELY";
@@ -177,8 +204,7 @@
       : backLink + renderTable(list) + renderCountries(list);
 
     $("stamp").textContent = state.updated
-      ? "Data last synced " + new Date(state.updated).toLocaleString()
-      : "Showing built-in sample data.";
+      ? "Data last synced " + new Date(state.updated).toLocaleString() : "";
   }
 
   function fillViewPicker() {
@@ -242,24 +268,34 @@
   wireButtons();
 
   V.load(V.CFG.SCRIPT_URL).then(function (res) {
+    /* The reason lands in the console for us; partners only see the
+       plain-English state above. */
+    if (res.error) console.warn("[VIVELY] data source:", res.source, "—", res.error);
+
+    if (!res.data) {
+      renderUnavailable("Report data unavailable",
+        "We could not load the campaign data right now. Please try again in a moment.");
+      return;
+    }
+
     state.campaigns = (res.data.campaigns || []).map(V.clean)
       .filter(function (c) { return c.show && c.name; });
     state.countries = res.data.countries || [];
     state.updated = res.data.updated || null;
 
-    $("dot").className = "dot" + (res.source === "live" ? "" : " warn");
-
-    /* Partner-safe wording: never mention config files or setup here. */
-    if (res.source !== "live") {
-      $("msg").innerHTML = '<div class="notice warn">' +
-        'This report is showing placeholder figures — live data is not connected yet.</div>';
-    }
-
     if (!state.campaigns.length) {
-      state.campaigns = V.SAMPLE.campaigns.map(V.clean);
-      state.countries = V.SAMPLE.countries;
+      renderUnavailable("Report data unavailable",
+        "There are no published campaigns to show yet.");
+      return;
     }
 
+    if (PAGE === "report" && state.brand && !selected().length) {
+      renderUnavailable("Campaign not found",
+        "This report link does not match a published campaign. Please check the link.");
+      return;
+    }
+
+    $("dot").className = "dot";
     fillViewPicker();
     render();
   });

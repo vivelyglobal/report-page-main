@@ -286,7 +286,8 @@
 
   /* ── load & save ─────────────────────────────────────────────────── */
   function ingest(res) {
-    state.rows = (res.data.campaigns || []).map(function (r) {
+    var data = res.data || { campaigns: [], countries: [], updated: null };
+    state.rows = (data.campaigns || []).map(function (r) {
       return {
         id: V.S(r.id), name: V.S(r.name) || V.S(r.id),
         show: V.B(r.show) ? "TRUE" : "FALSE",
@@ -296,26 +297,27 @@
       };
     });
     state.countries = {};
-    (res.data.countries || []).forEach(function (r) {
+    (data.countries || []).forEach(function (r) {
       var k = V.S(r.campaign).toLowerCase();
       if (!k) return;
       (state.countries[k] = state.countries[k] || []).push({
         country: V.S(r.country), kols: Math.round(V.N(r.kols))
       });
     });
-    state.updated = res.data.updated || null;
+    state.updated = data.updated || null;
 
     $("dot").className = "dot" + (res.source === "live" ? "" : " warn");
     $("sub").textContent = state.rows.length + " campaign" +
       (state.rows.length === 1 ? "" : "s") +
-      (res.source === "live" ? " · connected to your sheet" : " · sample data");
+      (res.source === "live" ? " · connected to your sheet" : " · not connected");
     $("stamp").textContent = state.updated
       ? "Sheet last read " + new Date(state.updated).toLocaleString() : "";
 
     if (!V.CFG.SCRIPT_URL) {
       $("msg").innerHTML = '<div class="notice warn"><b>Not connected yet.</b> ' +
         'Follow SETUP.md, then paste your Web app URL into <code>config.js</code>. ' +
-        'Until then you are editing sample data and Save will not work.</div>';
+        'Until then this table starts empty and Save will not work. ' +
+        'Partner pages show “Report data unavailable” rather than any stand-in figures.</div>';
     } else if (res.error) {
       $("msg").innerHTML = '<div class="notice warn"><b>Could not read the sheet.</b> ' +
         V.esc(res.error) + '</div>';
